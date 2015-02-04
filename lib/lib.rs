@@ -390,7 +390,7 @@ macro_rules! value_methods(
             }
             #[inline(always)]
             fn as_val(&self) -> Value {
-                Value(unsafe { mem::transmute(self) })
+                Value(unsafe { mem::transmute(*self) })
             }
         }
 
@@ -413,7 +413,7 @@ macro_rules! value_methods(
         impl ValueT for $ty {
             #[inline(always)]
             fn as_val(&self) -> Value {
-                Value(unsafe { mem::transmute(self) })
+                Value(unsafe { mem::transmute(*self) })
             }
             #[inline(always)]
             fn from_val(value: Value) -> $ty {

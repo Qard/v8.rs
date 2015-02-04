@@ -1,6 +1,8 @@
 #![allow(non_snake_case)]
-#![allow(non_uppercase_statics)]
-#![feature(macro_rules)]
+// #![allow(non_uppercase_statics)]
+#![allow(non_upper_case_globals)]
+#![allow(raw_pointer_derive)]
+#![feature(libc)]
 
 extern crate libc;
 
@@ -9,20 +11,21 @@ use std::fmt;
 use std::mem;
 use std::ptr;
 
-#[cfg(target_word_size="32")] const kApiPointerSize: uint = 4;
-#[cfg(target_word_size="64")] const kApiPointerSize: uint = 8;
-const kApiInt64Size: uint = 8;
-const kAmountOfExternalAllocatedMemoryOffset: uint = 4 * kApiPointerSize;
-const kAmountOfExternalAllocatedMemoryAtLastGlobalGCOffset: uint =
+#[cfg(target_pointer_width="32")] const kApiPointerSize: usize = 4;
+#[cfg(target_pointer_width="64")] const kApiPointerSize: usize = 8;
+
+const kApiInt64Size: usize = 8;
+const kAmountOfExternalAllocatedMemoryOffset: usize = 4 * kApiPointerSize;
+const kAmountOfExternalAllocatedMemoryAtLastGlobalGCOffset: usize =
         kAmountOfExternalAllocatedMemoryOffset + kApiInt64Size;
-const kIsolateRootsOffset: uint =
+const kIsolateRootsOffset: usize =
         kAmountOfExternalAllocatedMemoryAtLastGlobalGCOffset + kApiInt64Size +
         kApiPointerSize;
-const kUndefinedValueRootIndex: uint = 5;
-const kNullValueRootIndex: uint = 7;
-const kTrueValueRootIndex: uint = 8;
-const kFalseValueRootIndex: uint = 9;
-const kEmptyStringRootIndex: uint = 152;
+const kUndefinedValueRootIndex: usize = 5;
+const kNullValueRootIndex: usize = 7;
+const kTrueValueRootIndex: usize = 8;
+const kFalseValueRootIndex: usize = 9;
+const kEmptyStringRootIndex: usize = 152;
 
 #[link(name="v8")]
 extern {
@@ -177,7 +180,7 @@ macro_rules! data_methods(
             }
         }
 
-        impl fmt::Show for $ty {
+        impl fmt::Debug for $ty {
             // TODO(bnoordhuis) Maybe specialize for SMIs and strings.
             // Maybe ToString() objects?
             fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
@@ -185,11 +188,11 @@ macro_rules! data_methods(
             }
         }
     );
-)
+);
 
 macro_rules! value_methods(
     ($ty:ident) => (
-        data_methods!($ty)
+        data_methods!($ty);
 
         impl $ty {
             #[inline(always)]
@@ -387,7 +390,7 @@ macro_rules! value_methods(
             }
             #[inline(always)]
             fn as_val(&self) -> Value {
-                Value(unsafe { mem::transmute(*self) })
+                Value(unsafe { mem::transmute(self) })
             }
         }
 
@@ -410,7 +413,7 @@ macro_rules! value_methods(
         impl ValueT for $ty {
             #[inline(always)]
             fn as_val(&self) -> Value {
-                Value(unsafe { mem::transmute(*self) })
+                Value(unsafe { mem::transmute(self) })
             }
             #[inline(always)]
             fn from_val(value: Value) -> $ty {
@@ -420,12 +423,13 @@ macro_rules! value_methods(
             }
         }
     );
-)
+);
 
 #[repr(C)]
+#[derive(Copy)]
 pub struct Boolean(*mut *mut Boolean);
 
-value_methods!(Boolean)
+value_methods!(Boolean);
 
 impl Boolean {
     // XXX(bnoordhuis) Never fails but returning Boolean
@@ -443,6 +447,7 @@ impl Boolean {
 }
 
 #[repr(C)]
+#[derive(Copy)]
 pub struct CreateParams {
     entry_hook: *const u8,
     code_event_handler: *const u8,
@@ -462,9 +467,10 @@ impl Default for CreateParams {
 }
 
 #[repr(C)]
+#[derive(Copy)]
 pub struct Context(*mut *mut Context);
 
-data_methods!(Context)
+data_methods!(Context);
 
 impl Context {
     pub fn Enter(&self) {
@@ -490,7 +496,7 @@ impl Context {
 
 // Can't use a RAII type for Context::Scope because of
 // https://github.com/rust-lang/rust/issues/17858
-pub fn with_context_scope<T>(context: Context, closure: || -> T) -> T {
+pub fn with_context_scope<T>(context: Context, closure: fn() -> T) -> T {
     context.Enter();
     let rval = closure();
     context.Exit();
@@ -498,12 +504,14 @@ pub fn with_context_scope<T>(context: Context, closure: || -> T) -> T {
 }
 
 #[repr(C)]
+#[derive(Copy)]
 pub struct ExtensionConfiguration;
 
 #[repr(C)]
+#[derive(Copy)]
 pub struct Function(*mut *mut Function);
 
-value_methods!(Function)
+value_methods!(Function);
 
 impl Function {
     pub fn Call<T: ValueT>(&self, recv: T, argv: &[Value]) -> Option<Value> {
@@ -519,6 +527,7 @@ impl Function {
 pub type FunctionCallback = extern fn(FunctionCallbackInfo);
 
 #[repr(C)]
+#[derive(Copy)]
 pub struct FunctionCallbackInfo(*mut *mut FunctionCallbackInfo);
 
 impl FunctionCallbackInfo {
@@ -538,9 +547,10 @@ impl FunctionCallbackInfo {
 }
 
 #[repr(C)]
+#[derive(Copy)]
 pub struct FunctionTemplate(*mut *mut FunctionTemplate);
 
-data_methods!(FunctionTemplate)
+data_methods!(FunctionTemplate);
 
 impl FunctionTemplate {
     pub fn GetFunction(&self) -> Option<Function> {
@@ -560,9 +570,12 @@ impl FunctionTemplate {
 }
 
 #[repr(C)]
-struct HandleScope([*mut u8, ..3]);
+#[derive(Copy)]
+struct HandleScope([*mut u8; 3]);
+// NOTE: Not too sure about this...
+// struct HandleScope([*mut u8, ..3]);
 
-pub fn with_handle_scope<T>(isolate: Isolate, closure: || -> T) -> T {
+pub fn with_handle_scope<T>(isolate: Isolate, closure: fn() -> T) -> T {
     let null = ptr::null_mut();
     let mut this: HandleScope = HandleScope([null, null, null]);
     unsafe { _ZN2v811HandleScopeC1EPNS_7IsolateE(&mut this, isolate) };
@@ -576,7 +589,7 @@ pub fn with_handle_scope<T>(isolate: Isolate, closure: || -> T) -> T {
 // return the concrete type, not the base type (e.g. Int32 instead of Integer.)
 macro_rules! integer_methods(
     ($ty:ident, $rty:ty) => (
-        value_methods!($ty)
+        value_methods!($ty);
 
         impl $ty {
             pub fn New(isolate: Isolate, value: i32) -> Option<$ty> {
@@ -605,21 +618,25 @@ macro_rules! integer_methods(
             }
         }
     );
-)
+);
 
 #[repr(C)]
+#[derive(Copy)]
 pub struct Integer(*mut *mut Integer);
-integer_methods!(Integer, i64)
+integer_methods!(Integer, i64);
 
 #[repr(C)]
+#[derive(Copy)]
 pub struct Int32(*mut *mut Int32);
-integer_methods!(Int32, i32)
+integer_methods!(Int32, i32);
 
 #[repr(C)]
+#[derive(Copy)]
 pub struct Uint32(*mut *mut Uint32);
-integer_methods!(Uint32, u32)
+integer_methods!(Uint32, u32);
 
 #[repr(C)]
+#[derive(Copy)]
 pub struct Isolate(*mut Isolate);
 
 impl Isolate {
@@ -655,7 +672,7 @@ impl PartialEq for Isolate {
     }
 }
 
-impl fmt::Show for Isolate {
+impl fmt::Debug for Isolate {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         write!(fmt, "Isolate({:p})", self.raw_ptr())
     }
@@ -663,7 +680,7 @@ impl fmt::Show for Isolate {
 
 // Can't use a RAII type for Isolate::Scope because of
 // https://github.com/rust-lang/rust/issues/17858
-pub fn with_isolate_scope<T>(isolate: Isolate, closure: || -> T) -> T {
+pub fn with_isolate_scope<T>(isolate: Isolate, closure: fn() -> T) -> T {
     isolate.Enter();
     let rval = closure();
     isolate.Exit();
@@ -671,7 +688,10 @@ pub fn with_isolate_scope<T>(isolate: Isolate, closure: || -> T) -> T {
 }
 
 #[repr(C)]
-pub struct Locker([*mut u8, ..3]);
+#[derive(Copy)]
+struct Locker([*mut u8; 3]);
+// NOTE: Not too sure about this...
+// struct Locker([*mut u8, ..3]);
 
 impl Locker {
     pub fn IsActive() -> bool {
@@ -683,7 +703,7 @@ impl Locker {
     }
 }
 
-pub fn with_locker<T>(isolate: Isolate, closure: || -> T) -> T {
+pub fn with_locker<T>(isolate: Isolate, closure: fn() -> T) -> T {
     let null = ptr::null_mut();
     let mut this = Locker([null, null, null]);
     unsafe { _ZN2v86Locker10InitializeEPNS_7IsolateE(&mut this, isolate) };
@@ -693,9 +713,10 @@ pub fn with_locker<T>(isolate: Isolate, closure: || -> T) -> T {
 }
 
 #[repr(C)]
+#[derive(Copy)]
 pub struct Number(*mut *mut Number);
 
-value_methods!(Number)
+value_methods!(Number);
 
 impl Number {
     pub fn New(isolate: Isolate, value: f64) -> Option<Number> {
@@ -704,9 +725,10 @@ impl Number {
 }
 
 #[repr(C)]
+#[derive(Copy)]
 pub struct Object(*mut *mut Object);
 
-value_methods!(Object)
+value_methods!(Object);
 
 impl Object {
     pub fn Get<K: IndexT>(&self, key: K) -> Option<Value> {
@@ -735,6 +757,7 @@ impl IndexT for u32 {
 }
 
 #[repr(C)]
+#[derive(Copy)]
 pub struct ObjectTemplate(*mut *mut ObjectTemplate);
 
 impl Default for ObjectTemplate {
@@ -744,9 +767,10 @@ impl Default for ObjectTemplate {
 }
 
 #[repr(C)]
+#[derive(Copy)]
 pub struct Primitive(*mut *mut Primitive);
 
-value_methods!(Primitive)
+value_methods!(Primitive);
 
 pub fn Null(isolate: Isolate) -> Primitive {
     GetRoot(Primitive, isolate, kNullValueRootIndex)
@@ -764,13 +788,14 @@ pub fn False(isolate: Isolate) -> Boolean {
     GetRoot(Boolean, isolate, kFalseValueRootIndex)
 }
 
-fn GetRoot<T>(make: |*mut *mut T| -> T, isolate: Isolate, index: uint) -> T {
-    let base = match isolate { Isolate(that) => that as uint };
+fn GetRoot<T>(make: fn(*mut *mut T) -> T, isolate: Isolate, index: usize) -> T {
+    let base = match isolate { Isolate(that) => that as usize };
     let addr = base + kIsolateRootsOffset + index * kApiPointerSize;
     make(addr as *mut *mut T)
 }
 
 #[repr(C)]
+#[derive(Copy)]
 pub struct ResourceConstraints {
     max_semi_space_size: i32,
     max_old_space_size: i32,
@@ -794,13 +819,14 @@ impl Default for ResourceConstraints {
 }
 
 #[repr(C)]
+#[derive(Copy)]
 pub struct ReturnValue(*mut *mut Value);
 
 impl ReturnValue {
     pub fn GetIsolate(&self) -> Isolate {
         match *self {
             ReturnValue(this) => {
-                let that = this as uint - 2 * kApiPointerSize;
+                let that = this as usize - 2 * kApiPointerSize;
                 let that: *const *mut Isolate = unsafe { mem::transmute(that) };
                 Isolate(unsafe { *that })
             }
@@ -831,9 +857,10 @@ impl ReturnValue {
 }
 
 #[repr(C)]
+#[derive(Copy)]
 pub struct Script(*mut *mut Script);
 
-data_methods!(Script)
+data_methods!(Script);
 
 impl Script {
     pub fn Compile(source: String,
@@ -851,25 +878,28 @@ impl Script {
 }
 
 #[repr(C)]
+#[derive(Copy)]
 pub struct ScriptOrigin;
 
 #[repr(C)]
+#[derive(Copy)]
 pub struct Signature(*mut *mut Signature);
 
-data_methods!(Signature)
+data_methods!(Signature);
 
 #[repr(C)]
+#[derive(Copy)]
 pub struct String(*mut *mut String);
 
-value_methods!(String)
+value_methods!(String);
 
 impl String {
     pub fn Empty(isolate: Isolate) -> String {
         GetRoot(String, isolate, kEmptyStringRootIndex)
     }
 
-    pub fn Length(&self) -> int {
-        unsafe { _ZNK2v86String6LengthEv(*self) as int }
+    pub fn Length(&self) -> isize {
+        unsafe { _ZNK2v86String6LengthEv(*self) as isize }
     }
 
     pub fn NewFromUtf8(isolate: Isolate, data: &str,
@@ -882,7 +912,7 @@ impl String {
 }
 
 #[repr(C)]
-#[deriving(Show)]
+#[derive(Debug,Copy)]
 pub enum NewStringType {
     kNormalString,
     kInternalizedString,
@@ -890,9 +920,10 @@ pub enum NewStringType {
 }
 
 #[repr(C)]
+#[derive(Copy)]
 struct Unlocker(*mut u8);
 
-pub fn with_unlocker<T>(isolate: Isolate, closure: || -> T) -> T {
+pub fn with_unlocker<T>(isolate: Isolate, closure: fn() -> T) -> T {
     let mut this = Unlocker(ptr::null_mut());
     unsafe { _ZN2v88Unlocker10InitializeEPNS_7IsolateE(&mut this, isolate) };
     let rval = closure();
@@ -901,6 +932,7 @@ pub fn with_unlocker<T>(isolate: Isolate, closure: || -> T) -> T {
 }
 
 #[repr(C)]
+#[derive(Copy)]
 pub struct V8(*mut V8);
 
 impl V8 {
@@ -914,6 +946,7 @@ impl V8 {
 }
 
 #[repr(C)]
+#[derive(Copy)]
 pub struct Value(*mut *mut Value);
 
-value_methods!(Value)
+value_methods!(Value);

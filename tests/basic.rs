@@ -1,6 +1,6 @@
-#![feature(phase)]
+#![feature(core, plugin, rand, test)]
 
-#[phase(plugin)]
+#[plugin] #[no_link]
 extern crate regex_macros;
 extern crate regex;
 extern crate v8;
@@ -56,7 +56,7 @@ fn show() {
 fn fortytwo() {
     with_isolate_and_context(|isolate, _| {
         let source = v8::String::NewFromUtf8(isolate, "42",
-                                             v8::kNormalString).unwrap();
+                                             v8::NewStringType::kNormalString).unwrap();
         assert!(source.IsString());
         assert!(!source.IsStringObject());
         let script = v8::Script::Compile(source, None).unwrap();
@@ -115,9 +115,9 @@ fn basic_object() {
         let object = v8::Object::New(isolate).unwrap();
         assert!(object.IsObject());
         let key = v8::String::NewFromUtf8(isolate, "the_key",
-                                          v8::kNormalString).unwrap();
+                                          v8::NewStringType::kNormalString).unwrap();
         let value = v8::String::NewFromUtf8(isolate, "the_value",
-                                            v8::kNormalString).unwrap();
+                                            v8::NewStringType::kNormalString).unwrap();
         assert!(object.Set(key, value));
         assert!(object.Get(key).unwrap().IsString());
     });
@@ -129,7 +129,7 @@ fn object_get_and_set() {
         let obj = v8::Object::New(isolate).unwrap();
         let idx = 123 as u32;
         let key = v8::String::NewFromUtf8(isolate, "the_key",
-                                          v8::kNormalString).unwrap();
+                                          v8::NewStringType::kNormalString).unwrap();
         let abc = v8::Object::New(isolate).unwrap();
         let def = v8::Object::New(isolate).unwrap();
         assert!(obj.Set(idx, abc));
@@ -143,7 +143,7 @@ fn object_get_and_set() {
 fn global_object() {
     with_isolate_and_context(|isolate, context| {
         let key = v8::String::NewFromUtf8(isolate, "Object",
-                                          v8::kNormalString).unwrap();
+                                          v8::NewStringType::kNormalString).unwrap();
         assert!(context.Global().unwrap().Get(key).unwrap().IsObject());
     });
 }
@@ -165,7 +165,7 @@ fn native_api_call() {
         let t = v8::FunctionTemplate::New(isolate, Some(f),
                                           None, None, 2).unwrap();
         let key = v8::String::NewFromUtf8(isolate, "f",
-                                          v8::kNormalString).unwrap();
+                                          v8::NewStringType::kNormalString).unwrap();
         let global = context.Global().unwrap();
         global.Set(key, t.GetFunction().unwrap());
         assert!(global.Get(key).unwrap().IsFunction());
@@ -188,7 +188,7 @@ fn return_values() {
         let t = v8::FunctionTemplate::New(isolate, Some(f),
                                           None, None, 1).unwrap();
         let key = v8::String::NewFromUtf8(isolate, "f",
-                                          v8::kNormalString).unwrap();
+                                          v8::NewStringType::kNormalString).unwrap();
         context.Global().unwrap().Set(key, t.GetFunction().unwrap());
         assert!(eval(isolate, "f(0)").unwrap().IsString());
         assert!(eval(isolate, "f(1)").unwrap().IsNull());
@@ -216,12 +216,12 @@ fn function_call() {
 
 fn eval(isolate: v8::Isolate, raw_source: &str) -> Option<v8::Value> {
     let source = v8::String::NewFromUtf8(isolate, raw_source,
-                                         v8::kNormalString).unwrap();
+                                         v8::NewStringType::kNormalString).unwrap();
     let script = v8::Script::Compile(source, None).unwrap();
     script.Run()
 }
 
-fn with_isolate_and_context(closure: |v8::Isolate, v8::Context|) {
+fn with_isolate_and_context(closure: Fn(v8::Isolate, v8::Context)) {
     assert!(v8::V8::Initialize());
     {
         let mut isolate = v8::Isolate::New(None).unwrap();

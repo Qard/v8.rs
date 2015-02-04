@@ -27,7 +27,7 @@ const kTrueValueRootIndex: usize = 8;
 const kFalseValueRootIndex: usize = 9;
 const kEmptyStringRootIndex: usize = 152;
 
-#[link(name="v8")]
+// #[link(name="v8")]
 extern {
     fn _ZN2v87Context4ExitEv(this: Context);
     fn _ZN2v87Context5EnterEv(this: Context);

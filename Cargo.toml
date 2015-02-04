@@ -9,3 +9,7 @@ build = "build.rs"
 
 name = "v8"
 path = "lib/lib.rs"
+
+[dependencies]
+regex_macros = "*"
+regex = "*"

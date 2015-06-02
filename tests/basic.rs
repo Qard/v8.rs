@@ -1,24 +1,22 @@
-#![feature(core, plugin, rand, test)]
-
-#[plugin] #[no_link]
-extern crate regex_macros;
+#![feature(core, plugin, rand, test, negate_unsigned, convert)]
+#![plugin(regex_macros)]
 extern crate regex;
 extern crate v8;
 
 #[test]
 fn up_and_down() {
-    with_isolate_and_context(|_, _| {});
-    with_isolate_and_context(|_, _| {});
+    with_isolate_and_context(move |_, _| {});
+    with_isolate_and_context(move |_, _| {});
 }
 
 #[test]
 fn lock_and_unlock() {
-    with_isolate_and_context(|isolate, _| {
+    with_isolate_and_context(move |isolate, _| {
         assert!(v8::Locker::IsActive());
         assert!(v8::Locker::IsLocked(isolate));
-        v8::with_unlocker(isolate, || {
+        v8::with_unlocker(isolate, move || {
             assert!(!v8::Locker::IsLocked(isolate));
-            v8::with_locker(isolate, || {
+            v8::with_locker(isolate, move || {
                 assert!(v8::Locker::IsLocked(isolate));
             });
             assert!(!v8::Locker::IsLocked(isolate));
@@ -29,7 +27,7 @@ fn lock_and_unlock() {
 
 #[test]
 fn eq() {
-    with_isolate_and_context(|isolate, _| {
+    with_isolate_and_context(move |isolate, _| {
         let a = v8::Object::New(isolate).unwrap();
         let b = v8::Object::New(isolate).unwrap();
         assert_eq!(a, a);
@@ -40,21 +38,21 @@ fn eq() {
 
 #[test]
 fn show() {
-    with_isolate_and_context(|isolate, _| {
+    with_isolate_and_context(move |isolate, _| {
         let val = v8::Number::New(isolate, 13.37).unwrap();
         let re = regex!("Number\\(0x[0-9a-f]+\\)");
         let pp = format!("{}", val);
-        assert!(re.is_match(pp.as_slice()));
+        assert!(re.is_match(pp.as_str()));
         let val = v8::Object::New(isolate).unwrap();
         let re = regex!("Object\\(0x[0-9a-f]+\\)");
         let pp = format!("{}", val);
-        assert!(re.is_match(pp.as_slice()));
+        assert!(re.is_match(pp.as_str()));
     });
 }
 
 #[test]
 fn fortytwo() {
-    with_isolate_and_context(|isolate, _| {
+    with_isolate_and_context(move |isolate, _| {
         let source = v8::String::NewFromUtf8(isolate, "42",
                                              v8::NewStringType::kNormalString).unwrap();
         assert!(source.IsString());
@@ -69,7 +67,7 @@ fn fortytwo() {
 
 #[test]
 fn primitives() {
-    with_isolate_and_context(|isolate, _| {
+    with_isolate_and_context(move |isolate, _| {
         assert!(v8::Null(isolate).IsNull());
         assert!(v8::Undefined(isolate).IsUndefined());
         assert!(v8::True(isolate).IsTrue());
@@ -81,7 +79,7 @@ fn primitives() {
 
 #[test]
 fn booleans() {
-    with_isolate_and_context(|isolate, _| {
+    with_isolate_and_context(move |isolate, _| {
         assert!(v8::Boolean::New(isolate, true).unwrap().IsTrue());
         assert!(v8::Boolean::New(isolate, false).unwrap().IsFalse());
         assert!(v8::Boolean::New(isolate, true).unwrap().Value());
@@ -91,7 +89,7 @@ fn booleans() {
 
 #[test]
 fn integers() {
-    with_isolate_and_context(|isolate, _| {
+    with_isolate_and_context(move |isolate, _| {
         assert_eq!(42, v8::Integer::New(isolate, 42).unwrap().Value());
         assert_eq!(-1 as u32 as i64,
                    v8::Integer::NewFromUnsigned(isolate, -1).unwrap().Value());
@@ -102,7 +100,7 @@ fn integers() {
 
 #[test]
 fn basic_number() {
-    with_isolate_and_context(|isolate, _| {
+    with_isolate_and_context(move |isolate, _| {
         let val = 13.37;
         let num = v8::Number::New(isolate, val).unwrap();
         assert_eq!(val, num.NumberValue());
@@ -111,7 +109,7 @@ fn basic_number() {
 
 #[test]
 fn basic_object() {
-    with_isolate_and_context(|isolate, _| {
+    with_isolate_and_context(move |isolate, _| {
         let object = v8::Object::New(isolate).unwrap();
         assert!(object.IsObject());
         let key = v8::String::NewFromUtf8(isolate, "the_key",
@@ -125,7 +123,7 @@ fn basic_object() {
 
 #[test]
 fn object_get_and_set() {
-    with_isolate_and_context(|isolate, _| {
+    with_isolate_and_context(move |isolate, _| {
         let obj = v8::Object::New(isolate).unwrap();
         let idx = 123 as u32;
         let key = v8::String::NewFromUtf8(isolate, "the_key",
@@ -141,7 +139,7 @@ fn object_get_and_set() {
 
 #[test]
 fn global_object() {
-    with_isolate_and_context(|isolate, context| {
+    with_isolate_and_context(move |isolate, context| {
         let key = v8::String::NewFromUtf8(isolate, "Object",
                                           v8::NewStringType::kNormalString).unwrap();
         assert!(context.Global().unwrap().Get(key).unwrap().IsObject());
@@ -150,10 +148,10 @@ fn global_object() {
 
 #[test]
 fn native_api_call() {
-    with_isolate_and_context(|isolate, context| {
+    with_isolate_and_context(move |isolate, context| {
         extern fn f(info: v8::FunctionCallbackInfo) {
             let isolate = info.GetIsolate();
-            let return_value = info.GetReturnValue();
+            let mut return_value = info.GetReturnValue();
             assert_eq!(isolate, return_value.GetIsolate());
             assert!(info.At(0).IsNumber());
             assert!(info.At(1).IsNumber());
@@ -177,7 +175,7 @@ fn native_api_call() {
 
 #[test]
 fn return_values() {
-    with_isolate_and_context(|isolate, context| {
+    with_isolate_and_context(move |isolate, context| {
         extern fn f(info: v8::FunctionCallbackInfo) {
             match info.At(0).NumberValue() {
                 0. => info.GetReturnValue().SetEmptyString(),
@@ -198,7 +196,7 @@ fn return_values() {
 
 #[test]
 fn function_call() {
-    with_isolate_and_context(|isolate, _| {
+    with_isolate_and_context(move |isolate, _| {
         let val = eval(isolate, "(function(x, y) { return x * y })").unwrap();
         let fun: v8::Function = val.As();
         let argv = [v8::Int32::New(isolate, 42).unwrap().As(),
@@ -221,15 +219,15 @@ fn eval(isolate: v8::Isolate, raw_source: &str) -> Option<v8::Value> {
     script.Run()
 }
 
-fn with_isolate_and_context(closure: Fn(v8::Isolate, v8::Context)) {
+fn with_isolate_and_context<F>(closure: F) where F: Fn(v8::Isolate, v8::Context) {
     assert!(v8::V8::Initialize());
     {
         let mut isolate = v8::Isolate::New(None).unwrap();
-        v8::with_locker(isolate, || {
-            v8::with_handle_scope(isolate, || {
-                v8::with_isolate_scope(isolate, || {
+        v8::with_locker(isolate, move || {
+            v8::with_handle_scope(isolate, move || {
+                v8::with_isolate_scope(isolate, move || {
                     let context = v8::Context::New(isolate).unwrap();
-                    v8::with_context_scope(context, || {
+                    v8::with_context_scope(context, move || {
                         closure(isolate, context)
                     });
                 });

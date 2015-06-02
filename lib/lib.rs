@@ -187,6 +187,14 @@ macro_rules! data_methods(
                 write!(fmt, "{}({:p})", stringify!($ty), self.raw_ptr())
             }
         }
+
+        impl fmt::Display for $ty {
+            // TODO(bnoordhuis) Maybe specialize for SMIs and strings.
+            // Maybe ToString() objects?
+            fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+                write!(fmt, "{}({:p})", stringify!($ty), self.raw_ptr())
+            }
+        }
     );
 );
 
@@ -426,7 +434,7 @@ macro_rules! value_methods(
 );
 
 #[repr(C)]
-#[derive(Copy)]
+#[derive(Clone,Copy)]
 pub struct Boolean(*mut *mut Boolean);
 
 value_methods!(Boolean);
@@ -447,7 +455,7 @@ impl Boolean {
 }
 
 #[repr(C)]
-#[derive(Copy)]
+#[derive(Clone,Copy)]
 pub struct CreateParams {
     entry_hook: *const u8,
     code_event_handler: *const u8,
@@ -467,7 +475,7 @@ impl Default for CreateParams {
 }
 
 #[repr(C)]
-#[derive(Copy)]
+#[derive(Clone,Copy)]
 pub struct Context(*mut *mut Context);
 
 data_methods!(Context);
@@ -496,7 +504,7 @@ impl Context {
 
 // Can't use a RAII type for Context::Scope because of
 // https://github.com/rust-lang/rust/issues/17858
-pub fn with_context_scope<T>(context: Context, closure: fn() -> T) -> T {
+pub fn with_context_scope<T,F>(context: Context, closure: F) -> T where F: FnOnce() -> T {
     context.Enter();
     let rval = closure();
     context.Exit();
@@ -504,11 +512,11 @@ pub fn with_context_scope<T>(context: Context, closure: fn() -> T) -> T {
 }
 
 #[repr(C)]
-#[derive(Copy)]
+#[derive(Clone,Copy)]
 pub struct ExtensionConfiguration;
 
 #[repr(C)]
-#[derive(Copy)]
+#[derive(Clone,Copy)]
 pub struct Function(*mut *mut Function);
 
 value_methods!(Function);
@@ -518,7 +526,7 @@ impl Function {
         unsafe {
             _ZN2v88Function4CallENS_6HandleINS_5ValueEEEiPS3_(
                     *self, recv.as_val(), argv.len() as i32,
-                    argv.as_slice().as_ptr())
+                    argv.as_ptr())
         }.to_option()
     }
 }
@@ -527,7 +535,7 @@ impl Function {
 pub type FunctionCallback = extern fn(FunctionCallbackInfo);
 
 #[repr(C)]
-#[derive(Copy)]
+#[derive(Clone,Copy)]
 pub struct FunctionCallbackInfo(*mut *mut FunctionCallbackInfo);
 
 impl FunctionCallbackInfo {
@@ -547,7 +555,7 @@ impl FunctionCallbackInfo {
 }
 
 #[repr(C)]
-#[derive(Copy)]
+#[derive(Clone,Copy)]
 pub struct FunctionTemplate(*mut *mut FunctionTemplate);
 
 data_methods!(FunctionTemplate);
@@ -570,12 +578,12 @@ impl FunctionTemplate {
 }
 
 #[repr(C)]
-#[derive(Copy)]
+#[derive(Clone,Copy)]
 struct HandleScope([*mut u8; 3]);
 // NOTE: Not too sure about this...
 // struct HandleScope([*mut u8, ..3]);
 
-pub fn with_handle_scope<T>(isolate: Isolate, closure: fn() -> T) -> T {
+pub fn with_handle_scope<T,F>(isolate: Isolate, closure: F) -> T where F: FnOnce() -> T {
     let null = ptr::null_mut();
     let mut this: HandleScope = HandleScope([null, null, null]);
     unsafe { _ZN2v811HandleScopeC1EPNS_7IsolateE(&mut this, isolate) };
@@ -621,22 +629,22 @@ macro_rules! integer_methods(
 );
 
 #[repr(C)]
-#[derive(Copy)]
+#[derive(Clone,Copy)]
 pub struct Integer(*mut *mut Integer);
 integer_methods!(Integer, i64);
 
 #[repr(C)]
-#[derive(Copy)]
+#[derive(Clone,Copy)]
 pub struct Int32(*mut *mut Int32);
 integer_methods!(Int32, i32);
 
 #[repr(C)]
-#[derive(Copy)]
+#[derive(Clone,Copy)]
 pub struct Uint32(*mut *mut Uint32);
 integer_methods!(Uint32, u32);
 
 #[repr(C)]
-#[derive(Copy)]
+#[derive(Clone,Copy)]
 pub struct Isolate(*mut Isolate);
 
 impl Isolate {
@@ -680,7 +688,7 @@ impl fmt::Debug for Isolate {
 
 // Can't use a RAII type for Isolate::Scope because of
 // https://github.com/rust-lang/rust/issues/17858
-pub fn with_isolate_scope<T>(isolate: Isolate, closure: fn() -> T) -> T {
+pub fn with_isolate_scope<T,F>(isolate: Isolate, closure: F) -> T where F: FnOnce() -> T {
     isolate.Enter();
     let rval = closure();
     isolate.Exit();
@@ -688,8 +696,8 @@ pub fn with_isolate_scope<T>(isolate: Isolate, closure: fn() -> T) -> T {
 }
 
 #[repr(C)]
-#[derive(Copy)]
-struct Locker([*mut u8; 3]);
+#[derive(Clone,Copy)]
+pub struct Locker([*mut u8; 3]);
 // NOTE: Not too sure about this...
 // struct Locker([*mut u8, ..3]);
 
@@ -703,7 +711,7 @@ impl Locker {
     }
 }
 
-pub fn with_locker<T>(isolate: Isolate, closure: fn() -> T) -> T {
+pub fn with_locker<T,F>(isolate: Isolate, closure: F) -> T where F : FnOnce() -> T {
     let null = ptr::null_mut();
     let mut this = Locker([null, null, null]);
     unsafe { _ZN2v86Locker10InitializeEPNS_7IsolateE(&mut this, isolate) };
@@ -713,7 +721,7 @@ pub fn with_locker<T>(isolate: Isolate, closure: fn() -> T) -> T {
 }
 
 #[repr(C)]
-#[derive(Copy)]
+#[derive(Clone,Copy)]
 pub struct Number(*mut *mut Number);
 
 value_methods!(Number);
@@ -725,7 +733,7 @@ impl Number {
 }
 
 #[repr(C)]
-#[derive(Copy)]
+#[derive(Clone,Copy)]
 pub struct Object(*mut *mut Object);
 
 value_methods!(Object);
@@ -757,7 +765,7 @@ impl IndexT for u32 {
 }
 
 #[repr(C)]
-#[derive(Copy)]
+#[derive(Clone,Copy)]
 pub struct ObjectTemplate(*mut *mut ObjectTemplate);
 
 impl Default for ObjectTemplate {
@@ -767,7 +775,7 @@ impl Default for ObjectTemplate {
 }
 
 #[repr(C)]
-#[derive(Copy)]
+#[derive(Clone,Copy)]
 pub struct Primitive(*mut *mut Primitive);
 
 value_methods!(Primitive);
@@ -788,14 +796,14 @@ pub fn False(isolate: Isolate) -> Boolean {
     GetRoot(Boolean, isolate, kFalseValueRootIndex)
 }
 
-fn GetRoot<T>(make: fn(*mut *mut T) -> T, isolate: Isolate, index: usize) -> T {
+fn GetRoot<T,F>(make: F, isolate: Isolate, index: usize) -> T where F: Fn(*mut *mut T) -> T {
     let base = match isolate { Isolate(that) => that as usize };
     let addr = base + kIsolateRootsOffset + index * kApiPointerSize;
     make(addr as *mut *mut T)
 }
 
 #[repr(C)]
-#[derive(Copy)]
+#[derive(Clone,Copy)]
 pub struct ResourceConstraints {
     max_semi_space_size: i32,
     max_old_space_size: i32,
@@ -819,7 +827,7 @@ impl Default for ResourceConstraints {
 }
 
 #[repr(C)]
-#[derive(Copy)]
+#[derive(Clone,Copy)]
 pub struct ReturnValue(*mut *mut Value);
 
 impl ReturnValue {
@@ -833,23 +841,26 @@ impl ReturnValue {
         }
     }
 
-    pub fn Set<T: ValueT>(&self, value: T) {
+    pub fn Set<T: ValueT>(&mut self, value: T) {
         self.set(value.as_val())
     }
 
-    pub fn SetEmptyString(&self) {
-        self.set(GetRoot(Value, self.GetIsolate(), kEmptyStringRootIndex))
+    pub fn SetEmptyString(&mut self) {
+        let isolate = self.GetIsolate();
+        self.set(GetRoot(Value, isolate, kEmptyStringRootIndex))
     }
 
-    pub fn SetNull(&self) {
-        self.set(GetRoot(Value, self.GetIsolate(), kNullValueRootIndex))
+    pub fn SetNull(&mut self) {
+        let isolate = self.GetIsolate();
+        self.set(GetRoot(Value, isolate, kNullValueRootIndex))
     }
 
-    pub fn SetUndefined(&self) {
-        self.set(GetRoot(Value, self.GetIsolate(), kUndefinedValueRootIndex))
+    pub fn SetUndefined(&mut self) {
+        let isolate = self.GetIsolate();
+        self.set(GetRoot(Value, isolate, kUndefinedValueRootIndex))
     }
 
-    pub fn set(&self, value: Value) {
+    pub fn set(&mut self, value: Value) {
         match (*self, value) {
             (ReturnValue(this), Value(that)) => unsafe { *this = *that }
         }
@@ -857,7 +868,7 @@ impl ReturnValue {
 }
 
 #[repr(C)]
-#[derive(Copy)]
+#[derive(Clone,Copy)]
 pub struct Script(*mut *mut Script);
 
 data_methods!(Script);
@@ -878,17 +889,17 @@ impl Script {
 }
 
 #[repr(C)]
-#[derive(Copy)]
+#[derive(Clone,Copy)]
 pub struct ScriptOrigin;
 
 #[repr(C)]
-#[derive(Copy)]
+#[derive(Clone,Copy)]
 pub struct Signature(*mut *mut Signature);
 
 data_methods!(Signature);
 
 #[repr(C)]
-#[derive(Copy)]
+#[derive(Clone,Copy)]
 pub struct String(*mut *mut String);
 
 value_methods!(String);
@@ -912,7 +923,7 @@ impl String {
 }
 
 #[repr(C)]
-#[derive(Debug,Copy)]
+#[derive(Clone,Copy)]
 pub enum NewStringType {
     kNormalString,
     kInternalizedString,
@@ -920,10 +931,10 @@ pub enum NewStringType {
 }
 
 #[repr(C)]
-#[derive(Copy)]
+#[derive(Clone,Copy)]
 struct Unlocker(*mut u8);
 
-pub fn with_unlocker<T>(isolate: Isolate, closure: fn() -> T) -> T {
+pub fn with_unlocker<T,F>(isolate: Isolate, closure: F) -> T where F: FnOnce() -> T {
     let mut this = Unlocker(ptr::null_mut());
     unsafe { _ZN2v88Unlocker10InitializeEPNS_7IsolateE(&mut this, isolate) };
     let rval = closure();
@@ -932,7 +943,7 @@ pub fn with_unlocker<T>(isolate: Isolate, closure: fn() -> T) -> T {
 }
 
 #[repr(C)]
-#[derive(Copy)]
+#[derive(Clone,Copy)]
 pub struct V8(*mut V8);
 
 impl V8 {
@@ -946,7 +957,7 @@ impl V8 {
 }
 
 #[repr(C)]
-#[derive(Copy)]
+#[derive(Clone,Copy)]
 pub struct Value(*mut *mut Value);
 
 value_methods!(Value);

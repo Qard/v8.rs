@@ -1,4 +1,4 @@
-#![feature(core, plugin, rand, test, negate_unsigned, convert)]
+#![feature(plugin, negate_unsigned, convert)]
 #![plugin(regex_macros)]
 extern crate regex;
 extern crate v8;

@@ -2,7 +2,7 @@ use std::process::Command;
 use std::env;
 
 fn main() {
-  Command::new("make").args(&["-f","makefile.cargo"]).status().unwrap();
+  Command::new("make").status().unwrap();
 
   let out_dir = env::var("OUT_DIR").unwrap();
 
